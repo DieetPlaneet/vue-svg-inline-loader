@@ -10,9 +10,8 @@
 const path = require("path");
 const crypto = require("crypto");
 const { readFileSync } = require("fs");
-const { getOptions } = require("loader-utils");
 const { validate: validateOptions } = require("schema-utils");
-const SVGO = require("svgo");
+const {optimize} = require("svgo");
 
 /* define default options object */
 const DEFAULT_OPTIONS = freeze({
@@ -36,7 +35,18 @@ const DEFAULT_OPTIONS = freeze({
 	transformImageAttributesToVueDirectives: true,
 	md5: true,
 	xhtml: false,
-	svgo: { plugins: [ { removeViewBox: false } ] },
+	svgo: {
+		plugins: [
+			{
+				name:   "preset-default",
+				params: {
+					overrides: {
+						removeViewBox: false
+					},
+				},
+			}
+		]
+	},
 	verbose: false
 });
 
@@ -118,7 +128,7 @@ module.exports = function(content) {
 	const callback = this.async();
 
 	/* parse deprecated options */
-	const loaderOptions = getOptions(this) || {};
+	const loaderOptions = this.getOptions() || {};
 	const loaderOptionsPropNames = Object.getOwnPropertyNames(loaderOptions);
 	for(const name of loaderOptionsPropNames) {
 		if(PATTERN_DEPRECATED_OPTION.test(name)) {
@@ -171,7 +181,7 @@ module.exports = function(content) {
 	const PATTERN_SPRITE_KEYWORD = new RegExp(`\\s+(?:data-)?(?:v-)?${options.sprite.keyword}\\s+`, "i");
 
 	/* initialize svgo */
-	const svgo = options._svgo && new SVGO(options.svgo === true ? DEFAULT_OPTIONS.svgo : options.svgo);
+	const svgo = options._svgo && (options.svgo === true ? DEFAULT_OPTIONS.svgo : options.svgo);
 
 	/* create empty symbols set */
 	const symbols = new Set();
@@ -231,7 +241,10 @@ module.exports = function(content) {
 
 		/* process file content with svgo */
 		try {
-			file.content = options._svgo && (await svgo.optimize(file.content, { path: file.path })).data || file.content; // eslint-disable-line require-atomic-updates
+			let svgo_args = svgo;
+			svgo_args["path"] = file.path;
+
+			file.content = options._svgo && (await optimize(file.content, svgo_args)).data || file.content; // eslint-disable-line require-atomic-updates
 		} catch(error) {
 			throw new Error(`SVGO for ${file.path} failed.`);
 		}
